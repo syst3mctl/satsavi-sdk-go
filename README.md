@@ -49,18 +49,22 @@ func main() {
         fmt.Printf("Secret: %s (ID: %s)\n", s.Name, s.ID)
     }
 
-    // Update a secret (Zero-Knowledge: re-encrypts locally)
-    updatedSecret, err := client.UpdateSecret(ctx, "project-uuid", newSecret.ID, "my-app-secrets-v2", map[string]string{
-        "API_KEY":    "new-ultra-secret-key",
-        "DATABASE_URL": "postgres://user:pass@host:5432/db",
+    // 3. Update a secret incrementally
+    // (Zero-Knowledge: fetches existing, merges new keys locally, then re-encrypts)
+    log.Println("Updating secret with a new key...")
+    _, err = client.UpdateSecret(ctx, "project-uuid", newSecret.ID, "my-app-secrets", map[string]string{
+        "NEW_FEATURE_FLAGS": "enabled", // This will be ADDED to the existing API_KEY and DB_PASS
     })
     if err != nil {
         log.Fatal(err)
     }
-    fmt.Printf("Updated secret: %s\n", updatedSecret.Name)
 
-    // Delete a secret
-    err = client.DeleteSecret(ctx, updatedSecret.ID)
+    // 4. Verify the merge
+    data, _ := client.GetSecret(ctx, newSecret.ID)
+    fmt.Printf("Secrets count: %d (expected 3)\n", len(data))
+
+    // 5. Delete the secret
+    err = client.DeleteSecret(ctx, newSecret.ID)
     if err != nil {
         log.Fatal(err)
     }
@@ -222,5 +226,5 @@ The tests cover:
 - Authentication (Login) flow.
 - Secret creation with "True Blindness".
 - Incremental updates (verifying that old keys are preserved during updates).
-- Secret listing and deletion.
+- Secret listing and exhaustive deletion tests (including lifecycle verification and error handling).
 - Cryptographic primitives (wrapping, encryption/decryption).

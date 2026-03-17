@@ -77,5 +77,13 @@ func main() {
 		log.Printf("  %s: %s\n", k, v)
 	}
 
+	// 6. Delete the Secret
+	log.Printf("Deleting secret '%s'...\n", newSecret.ID)
+	err = client.DeleteSecret(context.Background(), newSecret.ID)
+	if err != nil {
+		log.Fatalf("Failed to delete secret: %v", err)
+	}
+	log.Println("Secret deleted successfully!")
+
 	log.Println("\nM2M SDK Demo completed successfully!")
 }
