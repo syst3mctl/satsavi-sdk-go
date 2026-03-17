@@ -1,6 +1,16 @@
-# satsavi-sdk-go
-
-**Move fast and stay secure with Satsavi.** A Go library for secure, zero-knowledge Machine-to-Machine communication.
+<p align="center">
+  <h1 align="center">satsavi-sdk-go</h1>
+  <p align="center">
+    <strong>Move fast and stay secure with Satsavi.</strong><br>
+    A Go library for secure, zero-knowledge Machine-to-Machine communication.
+  </p>
+  <p align="center">
+    <a href="https://goreportcard.com/report/github.com/syst3mctl/satsavi-sdk-go"><img src="https://goreportcard.com/badge/github.com/syst3mctl/satsavi-sdk-go?style=flat-square" alt="Go Report Card"></a>
+    <a href="https://pkg.go.dev/github.com/syst3mctl/satsavi-sdk-go"><img src="https://img.shields.io/badge/go.dev-reference-007d9c?style=flat-square&logo=go&logoColor=white" alt="Go Reference"></a>
+    <a href="https://github.com/syst3mctl/satsavi-sdk-go/releases"><img src="https://img.shields.io/github/v/release/syst3mctl/satsavi-sdk-go?style=flat-square&color=blue" alt="Release"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License: MIT"></a>
+  </p>
+</p>
 
 ## Quickstart
 
