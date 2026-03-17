@@ -179,17 +179,17 @@ func (c *Client) ListSecrets(ctx context.Context, projectID string) ([]Secret, e
 	return secrets, nil
 }
 
-// UpdateSecret updates an existing secret bundle with new data (merges with existing)
+// UpdateSecret updates an existing secret bundle with new data (incremental)
 func (c *Client) UpdateSecret(ctx context.Context, projectID string, secretID string, name string, data map[string]string) (*Secret, error) {
-	// 1. Fetch current data to perform partial update
-	currentData, err := c.GetSecret(ctx, secretID)
+	// 1. Fetch existing secret data for incremental update
+	existingData, err := c.GetSecret(ctx, secretID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch current secret data: %w", err)
+		return nil, fmt.Errorf("failed to fetch existing secret for incremental update: %w", err)
 	}
 
-	// 2. Merge data
+	// 2. Merge new data into existing data
 	for k, v := range data {
-		currentData[k] = v
+		existingData[k] = v
 	}
 
 	// 3. Generate local DEK
@@ -198,8 +198,8 @@ func (c *Client) UpdateSecret(ctx context.Context, projectID string, secretID st
 		return nil, err
 	}
 
-	// 4. Encrypt all entries as a JSON blob
-	jsonBytes, err := json.Marshal(currentData)
+	// 4. Encrypt merged entries as a JSON blob
+	jsonBytes, err := json.Marshal(existingData)
 	if err != nil {
 		return nil, err
 	}
@@ -221,8 +221,8 @@ func (c *Client) UpdateSecret(ctx context.Context, projectID string, secretID st
 	}
 
 	// 6. Prepare metadata entries (just keys, no values)
-	entries := make([]SecretEntry, 0, len(currentData))
-	for k := range currentData {
+	entries := make([]SecretEntry, 0, len(existingData))
+	for k := range existingData {
 		entries = append(entries, SecretEntry{
 			Key:            k,
 			EncryptedValue: "consolidated_in_blob",

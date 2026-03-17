@@ -118,22 +118,24 @@ Creates a new zero-knowledge secret bundle. This function implements "True Blind
 
 ---
 
-### `client.UpdateSecret(ctx context.Context, projectID, secretID, name string, newData map[string]string) (*Secret, error)`
-Updates an existing zero-knowledge secret bundle by performing a partial update (merge).
-1. Fetches the current encrypted bundle and decrypts it locally.
-2. Merges the existing data with the `newData` provided.
+### `client.UpdateSecret(ctx context.Context, projectID, secretID, name string, data map[string]string) (*Secret, error)`
+Updates an existing zero-knowledge secret bundle (Incremental). Like `CreateSecret`, this implements "True Blindness":
+1. Fetches the existing encrypted data and decrypts it locally.
+2. Merges the new `data` into the existing entries.
 3. Generates a new local 256-bit AES DEK.
-4. Re-encrypts the merged data locally.
+4. Encrypts the merged `data` locally.
 5. Wraps the new DEK locally using the public key.
 6. Uploads the update to the server.
+
 > [!NOTE]
-> The server never sees the old or new values. The metadata only identifies the keys present in the bundle.
+> This is an **incremental update**. If you only provide one key-value pair, it will be added to the existing bundle (or update it if the key already exists). Other existing keys are preserved.
+
 - **Parameters**:
     - `ctx`: A `context.Context`.
     - `projectID`: The UUID of the project.
     - `secretID`: The ID of the secret to update.
     - `name`: The (possibly new) name for the secret bundle.
-    - `newData`: The new map of key-value pairs to merge.
+    - `data`: The map of key-value pairs to add or update.
 - **Returns**: `*Secret`, `error`
 
 ---
@@ -192,22 +194,6 @@ type SecretKey struct {
 
 ---
 
----
-
-## Testing
-
-To run the unit tests for the SDK, use the following command:
-
-```bash
-go test ./... -v
-```
-
-This will run all tests, including:
-- **Authentication**: Verifies the Vault AppRole login flow.
-- **Zero-Knowledge Operations**: Ensures data is encrypted locally and the Data Encryption Key (DEK) is wrapped before transmission.
-- **Partial Updates**: Tests the new merging logic where `UpdateSecret` fetches existing secrets and merges them with new input.
-- **CRUD Operations**: Verifies creation, listing, and deletion of secrets.
-
 ## Zero-Knowledge Architecture (True Blindness)
 
 The SDK enforces "True Blindness" for all secret creation:
@@ -221,3 +207,20 @@ To use this SDK in your own project:
 1. Ensure your Go module matches the repository path: `module github.com/syst3mctl/satsavi-sdk-go`.
 2. Tag your releases (e.g., `git tag v1.0.1`).
 3. Import it using `go get github.com/syst3mctl/satsavi-sdk-go`.
+
+---
+
+## Testing
+
+To run the unit tests for the SDK, ensure you have Go installed and run the following command in the root of the repository:
+
+```bash
+go test -v ./...
+```
+
+The tests cover:
+- Authentication (Login) flow.
+- Secret creation with "True Blindness".
+- Incremental updates (verifying that old keys are preserved during updates).
+- Secret listing and deletion.
+- Cryptographic primitives (wrapping, encryption/decryption).

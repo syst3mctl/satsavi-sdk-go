@@ -1,10 +1,10 @@
 package satsavi
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -113,12 +113,11 @@ func TestClient_UpdateSecret(t *testing.T) {
 		Bytes: pubASN1,
 	})
 
-	// Initial data
-	initialData := map[string]string{"OLD_KEY": "OLD_VAL"}
-	key, _ := Generate256BitKey()
-	jsonBytes, _ := json.Marshal(initialData)
-	res, _ := Encrypt(jsonBytes, key)
-	wrappedKey := "mock-wrapped-key"
+	// 1. Setup real encryption for "existing" data
+	key := make([]byte, 32)
+	existingData := map[string]string{"K1": "V1"}
+	existingBytes, _ := json.Marshal(existingData)
+	res, _ := Encrypt(existingBytes, key)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -132,28 +131,21 @@ func TestClient_UpdateSecret(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 				json.NewEncoder(w).Encode(Secret{
 					ID:          "secret-id",
-					Name:        "original-name",
+					Name:        "test-secret",
 					EntriesBlob: res.CiphertextB64,
+					WrappedKey:  "dummy-wrapped",
 					IV:          res.IVB64,
-					WrappedKey:  wrappedKey,
 				})
 				return
 			}
-			if r.Method == "PUT" {
-				var req CreateSecretRequest
-				json.NewDecoder(r.Body).Decode(&req)
-				
-				// Verify merging happened (this is hard without full decryption here, 
-				// but we can check the request body if we want)
-				
-				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(Secret{
-					ID:   "secret-id",
-					Name: req.Name,
-				})
-				return
+			if r.Method != "PUT" {
+				t.Errorf("Expected PUT, got %s", r.Method)
 			}
-			t.Errorf("Unexpected method %s on %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(Secret{
+				ID:   "secret-id",
+				Name: "updated-name",
+			})
 		case "/m2m/unwrap":
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(map[string]string{
@@ -166,6 +158,10 @@ func TestClient_UpdateSecret(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL)
+	// We need to mock Decrypt/Encrypt or provide valid data. 
+	// Since Decrypt/Encrypt are using real crypto, we should probably mock the calls or use valid data.
+	// For simplicity in this test, we are focusing on the flow.
+	
 	secret, err := client.UpdateSecret(context.Background(), "project-id", "secret-id", "updated-name", map[string]string{"NEW_KEY": "NEW_VAL"})
 	if err != nil {
 		t.Fatalf("UpdateSecret failed: %v", err)
@@ -173,6 +169,81 @@ func TestClient_UpdateSecret(t *testing.T) {
 
 	if secret.Name != "updated-name" {
 		t.Errorf("Expected name updated-name, got %s", secret.Name)
+	}
+}
+
+func TestClient_UpdateSecret_Incremental(t *testing.T) {
+	privateKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	pubASN1, _ := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
+	pubPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: pubASN1,
+	})
+
+	// 1. Generate a valid encrypted blob for "existing" data
+	key := make([]byte, 32)
+	existingData := map[string]string{"OLD_KEY": "OLD_VAL"}
+	existingBytes, _ := json.Marshal(existingData)
+	res, _ := Encrypt(existingBytes, key)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/m2m/public-key":
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]string{
+				"public_key": string(pubPEM),
+			})
+		case "/m2m/secrets/secret-id":
+			if r.Method == "GET" {
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(Secret{
+					ID:          "secret-id",
+					Name:        "test-secret",
+					EntriesBlob: res.CiphertextB64,
+					IV:          res.IVB64,
+					WrappedKey:  "dummy-wrapped",
+				})
+				return
+			}
+			if r.Method == "PUT" {
+				var req CreateSecretRequest
+				json.NewDecoder(r.Body).Decode(&req)
+				
+				// Verify that OLD_KEY is still present in the metadata entries
+				foundOld := false
+				foundNew := false
+				for _, e := range req.Entries {
+					if e.Key == "OLD_KEY" {
+						foundOld = true
+					}
+					if e.Key == "NEW_KEY" {
+						foundNew = true
+					}
+				}
+				if !foundOld {
+					t.Errorf("OLD_KEY missing from updated entries")
+				}
+				if !foundNew {
+					t.Errorf("NEW_KEY missing from updated entries")
+				}
+
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(Secret{ID: "secret-id", Name: "test-secret"})
+				return
+			}
+		case "/m2m/unwrap":
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]string{
+				"plaintext": base64.StdEncoding.EncodeToString(key),
+			})
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	_, err := client.UpdateSecret(context.Background(), "project-id", "secret-id", "test-secret", map[string]string{"NEW_KEY": "NEW_VAL"})
+	if err != nil {
+		t.Fatalf("Incremental UpdateSecret failed: %v", err)
 	}
 }
 

@@ -77,30 +77,5 @@ func main() {
 		log.Printf("  %s: %s\n", k, v)
 	}
 
-	// 6. Partial Update (Merge)
-	// Zero-Knowledge: The SDK fetches current data, merges it with the new input,
-	// and re-encrypts the entire bundle before uploading to the server.
-	log.Printf("Performing partial update on secret '%s'...\n", newSecret.ID)
-	_, err = client.UpdateSecret(context.Background(), projectID, newSecret.ID, secretName, map[string]string{
-		"DB_PASSWORD": "even-more-secret-password-456", // Update existing key
-		"S3_BUCKET":   "my-prod-bucket",                 // Add new key
-	})
-	if err != nil {
-		log.Fatalf("Failed to update secret: %v", err)
-	}
-	log.Println("Secret updated successfully!")
-
-	// 7. Verify the update
-	log.Println("Fetching updated secret to verify merge...")
-	finalData, err := client.GetSecret(context.Background(), newSecret.ID)
-	if err != nil {
-		log.Fatalf("Failed to fetch final secret: %v", err)
-	}
-
-	log.Println("Final Merged Data:")
-	for k, v := range finalData {
-		log.Printf("  %s: %s\n", k, v)
-	}
-
 	log.Println("\nM2M SDK Demo completed successfully!")
 }
