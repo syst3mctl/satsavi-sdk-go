@@ -348,3 +348,81 @@ func TestClient_ListSecrets(t *testing.T) {
 		t.Errorf("Expected 2 secrets, got %d", len(secrets))
 	}
 }
+
+func TestClient_DeleteSecretEntries(t *testing.T) {
+	privateKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	pubASN1, _ := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
+	pubPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: pubASN1,
+	})
+
+	// 1. Setup real encryption for "existing" data with multiple keys
+	key := make([]byte, 32)
+	existingData := map[string]string{
+		"KEEP_ME":   "value1",
+		"DELETE_ME": "value2",
+	}
+	existingBytes, _ := json.Marshal(existingData)
+	res, _ := Encrypt(existingBytes, key)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/m2m/public-key":
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]string{
+				"public_key": string(pubPEM),
+			})
+		case "/m2m/secrets/secret-id":
+			if r.Method == "GET" {
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(Secret{
+					ID:          "secret-id",
+					Name:        "test-secret",
+					EntriesBlob: res.CiphertextB64,
+					IV:          res.IVB64,
+					WrappedKey:  "dummy-wrapped",
+				})
+				return
+			}
+			if r.Method == "PUT" {
+				var req CreateSecretRequest
+				json.NewDecoder(r.Body).Decode(&req)
+				
+				// Verify that DELETE_ME is GONE from metadata entries
+				foundDeleteMe := false
+				foundKeepMe := false
+				for _, e := range req.Entries {
+					if e.Key == "DELETE_ME" {
+						foundDeleteMe = true
+					}
+					if e.Key == "KEEP_ME" {
+						foundKeepMe = true
+					}
+				}
+				if foundDeleteMe {
+					t.Errorf("DELETE_ME still present in updated entries")
+				}
+				if !foundKeepMe {
+					t.Errorf("KEEP_ME missing from updated entries")
+				}
+
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(Secret{ID: "secret-id", Name: "test-secret"})
+				return
+			}
+		case "/m2m/unwrap":
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]string{
+				"plaintext": base64.StdEncoding.EncodeToString(key),
+			})
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	_, err := client.DeleteSecretEntries(context.Background(), "project-id", "secret-id", "test-secret", []string{"DELETE_ME"})
+	if err != nil {
+		t.Fatalf("DeleteSecretEntries failed: %v", err)
+	}
+}

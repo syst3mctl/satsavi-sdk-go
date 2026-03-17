@@ -63,7 +63,14 @@ func main() {
     data, _ := client.GetSecret(ctx, newSecret.ID)
     fmt.Printf("Secrets count: %d (expected 3)\n", len(data))
 
-    // 5. Delete the secret
+    // 5. Delete specific keys incrementally
+    log.Println("Removing a specific key...")
+    _, err = client.DeleteSecretEntries(ctx, "project-uuid", newSecret.ID, "my-app-secrets", []string{"DB_PASS"})
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // 6. Delete the entire secret bundle
     err = client.DeleteSecret(ctx, newSecret.ID)
     if err != nil {
         log.Fatal(err)
@@ -140,6 +147,23 @@ Updates an existing zero-knowledge secret bundle (Incremental). Like `CreateSecr
     - `secretID`: The ID of the secret to update.
     - `name`: The (possibly new) name for the secret bundle.
     - `data`: The map of key-value pairs to add or update.
+- **Returns**: `*Secret`, `error`
+
+---
+
+### `client.DeleteSecretEntries(ctx context.Context, projectID, secretID, name string, keys []string) (*Secret, error)`
+Removes specific keys from an existing zero-knowledge secret bundle (Incremental Deletion).
+1. Fetches the existing encrypted data and decrypts it locally.
+2. Removes the specified `keys` from the local data map.
+3. Re-encrypts the modified data and wraps a new DEK.
+4. Uploads the update to the server.
+
+- **Parameters**:
+    - `ctx`: A `context.Context`.
+    - `projectID`: The UUID of the project.
+    - `secretID`: The ID of the secret to modify.
+    - `name`: The name for the secret bundle.
+    - `keys`: A slice of strings representing the keys to delete.
 - **Returns**: `*Secret`, `error`
 
 ---

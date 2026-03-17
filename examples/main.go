@@ -77,8 +77,27 @@ func main() {
 		log.Printf("  %s: %s\n", k, v)
 	}
 
-	// 6. Delete the Secret
-	log.Printf("Deleting secret '%s'...\n", newSecret.ID)
+	// 6. Partial Deletion (Delete specific keys)
+	log.Printf("Removing 'REDIS_URL' from secret '%s'...\n", newSecret.ID)
+	_, err = client.DeleteSecretEntries(context.Background(), projectID, newSecret.ID, secretName, []string{"REDIS_URL"})
+	if err != nil {
+		log.Fatalf("Failed to remove keys: %v", err)
+	}
+	log.Println("Key removed successfully!")
+
+	// 7. Verify partial deletion
+	log.Println("Verifying partial deletion...")
+	remainingData, err := client.GetSecret(context.Background(), newSecret.ID)
+	if err != nil {
+		log.Fatalf("Failed to verify: %v", err)
+	}
+	if _, exists := remainingData["REDIS_URL"]; exists {
+		log.Fatal("REDIS_URL still exists after deletion!")
+	}
+	log.Printf("Verified! Remaining keys: %d\n", len(remainingData))
+
+	// 8. Delete the entire Secret
+	log.Printf("Deleting entire secret '%s'...\n", newSecret.ID)
 	err = client.DeleteSecret(context.Background(), newSecret.ID)
 	if err != nil {
 		log.Fatalf("Failed to delete secret: %v", err)

@@ -258,6 +258,85 @@ func (c *Client) UpdateSecret(ctx context.Context, projectID string, secretID st
 	return &secret, nil
 }
 
+// DeleteSecretEntries removes specific keys from an existing secret bundle (incremental deletion)
+func (c *Client) DeleteSecretEntries(ctx context.Context, projectID string, secretID string, name string, keys []string) (*Secret, error) {
+	// 1. Fetch existing secret data
+	existingData, err := c.GetSecret(ctx, secretID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch existing secret for partial deletion: %w", err)
+	}
+
+	// 2. Remove specified keys
+	for _, k := range keys {
+		delete(existingData, k)
+	}
+
+	// 3. Generate local DEK
+	key, err := Generate256BitKey()
+	if err != nil {
+		return nil, err
+	}
+
+	// 4. Encrypt modified entries as a JSON blob
+	jsonBytes, err := json.Marshal(existingData)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := Encrypt(jsonBytes, key)
+	if err != nil {
+		return nil, err
+	}
+
+	// 5. Wrap DEK locally via Public Key
+	pubKey, err := c.GetPublicKey(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get public key for local wrapping: %w", err)
+	}
+
+	wrappedKey, err := WrapKeyRSA(key, pubKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to wrap key locally: %w", err)
+	}
+
+	// 6. Prepare metadata entries (just keys, no values)
+	entries := make([]SecretEntry, 0, len(existingData))
+	for k := range existingData {
+		entries = append(entries, SecretEntry{
+			Key:            k,
+			EncryptedValue: "consolidated_in_blob",
+		})
+	}
+
+	// 7. Update the encrypted bundle via API
+	reqBody := CreateSecretRequest{
+		ID:          secretID,
+		Name:        name,
+		ProjectID:   &projectID,
+		EntriesBlob: res.CiphertextB64,
+		WrappedKey:  wrappedKey,
+		IV:          res.IVB64,
+		Entries:     entries,
+	}
+
+	resp, err := c.doRequest(ctx, "PUT", "/m2m/secrets/"+secretID, reqBody)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to update secret during partial deletion: status %d", resp.StatusCode)
+	}
+
+	var secret Secret
+	if err := json.NewDecoder(resp.Body).Decode(&secret); err != nil {
+		return nil, err
+	}
+
+	return &secret, nil
+}
+
 // DeleteSecret deletes a secret bundle by ID
 func (c *Client) DeleteSecret(ctx context.Context, secretID string) error {
 	resp, err := c.doRequest(ctx, "DELETE", "/m2m/secrets/"+secretID, nil)
