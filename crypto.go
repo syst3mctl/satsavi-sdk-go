@@ -4,16 +4,16 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"encoding/base64"
-	"fmt"
-	"io"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
+	"fmt"
+	"io"
 )
 
-// CryptoResult contains the encrypted data and metadata
+// CryptoResult contains the encrypted data and metadata (ciphertext and IV)
 type CryptoResult struct {
 	CiphertextB64 string
 	IVB64         string

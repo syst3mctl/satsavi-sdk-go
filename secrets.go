@@ -19,6 +19,7 @@ type CreateSecretRequest struct {
 	Entries     []SecretEntry `json:"entries"`
 }
 
+// SecretEntry represents a single key inside an encrypted bundle
 type SecretEntry struct {
 	Key            string `json:"key"`
 	EncryptedValue string `json:"encrypted_value"`

@@ -17,6 +17,7 @@ type Client struct {
 	httpClient *http.Client
 }
 
+// AuthResponse contains the authentication token and its time-to-live
 type AuthResponse struct {
 	VaultToken string `json:"vault_token"`
 	TTL        int    `json:"ttl"`
@@ -89,6 +90,7 @@ type Secret struct {
 	Entries     []SecretKey `json:"entries,omitempty"`
 }
 
+// SecretKey contains metadata about a specific key within a bundle
 type SecretKey struct {
 	Key string `json:"key"`
 }
@@ -97,11 +99,11 @@ type SecretKey struct {
 func (c *Client) doRequest(ctx context.Context, method, path string, body interface{}) (*http.Response, error) {
 	var bodyReader io.Reader
 	if body != nil {
-		bodyJson, err := json.Marshal(body)
+		bodyJSON, err := json.Marshal(body)
 		if err != nil {
 			return nil, err
 		}
-		bodyReader = bytes.NewBuffer(bodyJson)
+		bodyReader = bytes.NewBuffer(bodyJSON)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, bodyReader)

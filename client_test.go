@@ -1,10 +1,10 @@
 package satsavi
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -158,10 +158,10 @@ func TestClient_UpdateSecret(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL)
-	// We need to mock Decrypt/Encrypt or provide valid data. 
+	// We need to mock Decrypt/Encrypt or provide valid data.
 	// Since Decrypt/Encrypt are using real crypto, we should probably mock the calls or use valid data.
 	// For simplicity in this test, we are focusing on the flow.
-	
+
 	secret, err := client.UpdateSecret(context.Background(), "project-id", "secret-id", "updated-name", map[string]string{"NEW_KEY": "NEW_VAL"})
 	if err != nil {
 		t.Fatalf("UpdateSecret failed: %v", err)
@@ -208,7 +208,7 @@ func TestClient_UpdateSecret_Incremental(t *testing.T) {
 			if r.Method == "PUT" {
 				var req CreateSecretRequest
 				json.NewDecoder(r.Body).Decode(&req)
-				
+
 				// Verify that OLD_KEY is still present in the metadata entries
 				foundOld := false
 				foundNew := false
@@ -280,46 +280,46 @@ func TestClient_Delete_NotFound(t *testing.T) {
 }
 
 func TestClient_Delete_Verify(t *testing.T) {
-    // Mock server that tracks a single secret
-    secretExists := true
-    server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        if r.Method == "DELETE" {
-            secretExists = false
-            w.WriteHeader(http.StatusNoContent)
-            return
-        }
-        if r.Method == "GET" {
-            if !secretExists {
-                w.WriteHeader(http.StatusNotFound)
-                return
-            }
-            w.WriteHeader(http.StatusOK)
-            json.NewEncoder(w).Encode(Secret{ID: "test-id"})
-            return
-        }
-    }))
-    defer server.Close()
+	// Mock server that tracks a single secret
+	secretExists := true
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "DELETE" {
+			secretExists = false
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if r.Method == "GET" {
+			if !secretExists {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(Secret{ID: "test-id"})
+			return
+		}
+	}))
+	defer server.Close()
 
-    client := NewClient(server.URL)
-    
-    // 1. Verify it exists
-    _, err := client.GetSecret(context.Background(), "test-id")
-    if err != nil && err.Error() != "failed to fetch secret: status 404" { // GetSecret will fail decryption with dummy data, but here we just check if it fetched
-        // Actually GetSecret fetches first, then unwraps. 
-        // For simplicity, let's just test that after Delete, Get returns 404 before it even tries decryption.
-    }
+	client := NewClient(server.URL)
 
-    // 2. Delete it
-    err = client.DeleteSecret(context.Background(), "test-id")
-    if err != nil {
-        t.Fatalf("Delete failed: %v", err)
-    }
+	// 1. Verify it exists
+	_, err := client.GetSecret(context.Background(), "test-id")
+	if err != nil && err.Error() != "failed to fetch secret: status 404" { // GetSecret will fail decryption with dummy data, but here we just check if it fetched
+		// Actually GetSecret fetches first, then unwraps.
+		// For simplicity, let's just test that after Delete, Get returns 404 before it even tries decryption.
+	}
 
-    // 3. Verify it's gone (should fail at fetch step with 404)
-    _, err = client.GetSecret(context.Background(), "test-id")
-    if err == nil {
-        t.Fatal("Expected error fetching deleted secret, got nil")
-    }
+	// 2. Delete it
+	err = client.DeleteSecret(context.Background(), "test-id")
+	if err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	// 3. Verify it's gone (should fail at fetch step with 404)
+	_, err = client.GetSecret(context.Background(), "test-id")
+	if err == nil {
+		t.Fatal("Expected error fetching deleted secret, got nil")
+	}
 }
 
 func TestClient_ListSecrets(t *testing.T) {
@@ -388,7 +388,7 @@ func TestClient_DeleteSecretEntries(t *testing.T) {
 			if r.Method == "PUT" {
 				var req CreateSecretRequest
 				json.NewDecoder(r.Body).Decode(&req)
-				
+
 				// Verify that DELETE_ME is GONE from metadata entries
 				foundDeleteMe := false
 				foundKeepMe := false

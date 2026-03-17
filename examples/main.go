@@ -40,9 +40,9 @@ func main() {
 	// and wraps the key using Vault's Public Key before sending to the server.
 	secretName := "Production-Config"
 	secretData := map[string]string{
-		"DB_PASSWORD":      "super-secret-password-123",
-		"API_KEY":          "sk_live_51M...",
-		"REDIS_URL":        "redis://localhost:6379",
+		"DB_PASSWORD":     "super-secret-password-123",
+		"API_KEY":         "sk_live_51M...",
+		"REDIS_URL":       "redis://localhost:6379",
 		"ENCRYPTION_SALT": "random-salt-xyz",
 	}
 
