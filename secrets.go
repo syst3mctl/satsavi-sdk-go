@@ -10,6 +10,7 @@ import (
 
 // CreateSecretRequest matches the API request for /m2m/secrets
 type CreateSecretRequest struct {
+	ID          string        `json:"id,omitempty"`
 	Name        string        `json:"name"`
 	ProjectID   *string       `json:"project_id,omitempty"`
 	EntriesBlob string        `json:"entries_blob"`
@@ -25,6 +26,17 @@ type SecretEntry struct {
 
 // CreateSecret performs the full Zero-Knowledge encryption and storage flow
 func (c *Client) CreateSecret(ctx context.Context, projectID string, name string, data map[string]string) (*Secret, error) {
+	// 0. Ensure name is unique within the project
+	existing, err := c.ListSecrets(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify secret name uniqueness: %w", err)
+	}
+	for _, s := range existing {
+		if s.Name == name {
+			return nil, fmt.Errorf("secret with name %q already exists in project %s", name, projectID)
+		}
+	}
+
 	// 1. Generate local DEK (Data Encryption Key)
 	key, err := Generate256BitKey()
 	if err != nil {
@@ -165,4 +177,87 @@ func (c *Client) ListSecrets(ctx context.Context, projectID string) ([]Secret, e
 	}
 
 	return secrets, nil
+}
+
+// UpdateSecret updates an existing secret bundle with new data
+func (c *Client) UpdateSecret(ctx context.Context, projectID string, secretID string, name string, data map[string]string) (*Secret, error) {
+	// 1. Generate local DEK
+	key, err := Generate256BitKey()
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Encrypt all entries as a JSON blob
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := Encrypt(jsonBytes, key)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Wrap DEK locally via Public Key
+	pubKey, err := c.GetPublicKey(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get public key for local wrapping: %w", err)
+	}
+
+	wrappedKey, err := WrapKeyRSA(key, pubKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to wrap key locally: %w", err)
+	}
+
+	// 4. Prepare metadata entries (just keys, no values)
+	entries := make([]SecretEntry, 0, len(data))
+	for k := range data {
+		entries = append(entries, SecretEntry{
+			Key:            k,
+			EncryptedValue: "consolidated_in_blob",
+		})
+	}
+
+	// 5. Update the encrypted bundle via API
+	reqBody := CreateSecretRequest{
+		ID:          secretID,
+		Name:        name,
+		ProjectID:   &projectID,
+		EntriesBlob: res.CiphertextB64,
+		WrappedKey:  wrappedKey,
+		IV:          res.IVB64,
+		Entries:     entries,
+	}
+
+	resp, err := c.doRequest(ctx, "PUT", "/m2m/secrets/"+secretID, reqBody)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to update secret: status %d", resp.StatusCode)
+	}
+
+	var secret Secret
+	if err := json.NewDecoder(resp.Body).Decode(&secret); err != nil {
+		return nil, err
+	}
+
+	return &secret, nil
+}
+
+// DeleteSecret deletes a secret bundle by ID
+func (c *Client) DeleteSecret(ctx context.Context, secretID string) error {
+	resp, err := c.doRequest(ctx, "DELETE", "/m2m/secrets/"+secretID, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to delete secret: status %d", resp.StatusCode)
+	}
+
+	return nil
 }

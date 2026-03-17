@@ -53,6 +53,11 @@ func TestClient_CreateSecret(t *testing.T) {
 				"public_key": string(pubPEM),
 			})
 		case "/m2m/secrets":
+			if r.Method == "GET" {
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode([]Secret{})
+				return
+			}
 			if r.Method != "POST" {
 				t.Errorf("Expected POST, got %s", r.Method)
 			}
@@ -78,6 +83,84 @@ func TestClient_CreateSecret(t *testing.T) {
 
 	if secret.ID != "new-secret-id" {
 		t.Errorf("Expected secret ID new-secret-id, got %s", secret.ID)
+	}
+}
+
+func TestClient_CreateSecret_Uniqueness(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/m2m/secrets" && r.Method == "GET" {
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode([]Secret{
+				{ID: "existing-id", Name: "conflict-name"},
+			})
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	_, err := client.CreateSecret(context.Background(), "project-id", "conflict-name", map[string]string{"K": "V"})
+	if err == nil {
+		t.Fatal("Expected error for duplicate secret name, got nil")
+	}
+}
+
+func TestClient_UpdateSecret(t *testing.T) {
+	privateKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	pubASN1, _ := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
+	pubPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: pubASN1,
+	})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/m2m/public-key":
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]string{
+				"public_key": string(pubPEM),
+			})
+		case "/m2m/secrets/secret-id":
+			if r.Method != "PUT" {
+				t.Errorf("Expected PUT, got %s", r.Method)
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(Secret{
+				ID:   "secret-id",
+				Name: "updated-name",
+			})
+		default:
+			t.Errorf("Unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	secret, err := client.UpdateSecret(context.Background(), "project-id", "secret-id", "updated-name", map[string]string{"NEW_KEY": "NEW_VAL"})
+	if err != nil {
+		t.Fatalf("UpdateSecret failed: %v", err)
+	}
+
+	if secret.Name != "updated-name" {
+		t.Errorf("Expected name updated-name, got %s", secret.Name)
+	}
+}
+
+func TestClient_DeleteSecret(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/m2m/secrets/secret-id" {
+			t.Errorf("Expected path /m2m/secrets/secret-id, got %s", r.URL.Path)
+		}
+		if r.Method != "DELETE" {
+			t.Errorf("Expected DELETE, got %s", r.Method)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	err := client.DeleteSecret(context.Background(), "secret-id")
+	if err != nil {
+		t.Fatalf("DeleteSecret failed: %v", err)
 	}
 }
 

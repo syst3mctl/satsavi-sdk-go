@@ -40,12 +40,31 @@ func main() {
     }
     fmt.Printf("Created secret: %s\n", newSecret.Name)
 
-    // Get a secret
-    data, err := client.GetSecret(ctx, "my-app-secrets")
+    // List all secrets
+    secrets, err := client.ListSecrets(ctx, "project-uuid")
     if err != nil {
         log.Fatal(err)
     }
-    fmt.Println(data["API_KEY"])
+    for _, s := range secrets {
+        fmt.Printf("Secret: %s (ID: %s)\n", s.Name, s.ID)
+    }
+
+    // Update a secret (Zero-Knowledge: re-encrypts locally)
+    updatedSecret, err := client.UpdateSecret(ctx, "project-uuid", newSecret.ID, "my-app-secrets-v2", map[string]string{
+        "API_KEY":    "new-ultra-secret-key",
+        "DATABASE_URL": "postgres://user:pass@host:5432/db",
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Printf("Updated secret: %s\n", updatedSecret.Name)
+
+    // Delete a secret
+    err = client.DeleteSecret(ctx, updatedSecret.ID)
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println("Secret deleted successfully")
 }
 ```
 
@@ -93,9 +112,34 @@ Creates a new zero-knowledge secret bundle. This function implements "True Blind
 - **Parameters**: 
     - `ctx`: A `context.Context`.
     - `projectID`: The UUID of the project.
-    - `name`: A name for the secret bundle.
+    - `name`: A name for the secret bundle (must be unique within the project).
     - `data`: A map of key-value pairs to encrypt.
 - **Returns**: `*Secret` (the created bundle metadata), `error`
+
+---
+
+### `client.UpdateSecret(ctx context.Context, projectID, secretID, name string, data map[string]string) (*Secret, error)`
+Updates an existing zero-knowledge secret bundle. Like `CreateSecret`, this implements "True Blindness":
+1. Generates a new local 256-bit AES DEK.
+2. Encrypts the new `data` locally.
+3. Wraps the new DEK locally using the public key.
+4. Uploads the update to the server.
+> [!NOTE]
+> The server never sees the old or new values. The metadata only identifies the keys present in the bundle.
+- **Parameters**:
+    - `ctx`: A `context.Context`.
+    - `projectID`: The UUID of the project.
+    - `secretID`: The ID of the secret to update.
+    - `name`: The (possibly new) name for the secret bundle.
+    - `data`: The new map of key-value pairs.
+- **Returns**: `*Secret`, `error`
+
+---
+
+### `client.DeleteSecret(ctx context.Context, secretID string) error`
+Deletes a secret bundle from the vault.
+- **Parameters**: `secretID` (the UUID of the secret)
+- **Returns**: `error`
 
 ---
 
