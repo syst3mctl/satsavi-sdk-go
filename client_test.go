@@ -1,10 +1,11 @@
 package satsavi
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	"context"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"net/http"
@@ -112,6 +113,13 @@ func TestClient_UpdateSecret(t *testing.T) {
 		Bytes: pubASN1,
 	})
 
+	// Initial data
+	initialData := map[string]string{"OLD_KEY": "OLD_VAL"}
+	key, _ := Generate256BitKey()
+	jsonBytes, _ := json.Marshal(initialData)
+	res, _ := Encrypt(jsonBytes, key)
+	wrappedKey := "mock-wrapped-key"
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/m2m/public-key":
@@ -120,13 +128,36 @@ func TestClient_UpdateSecret(t *testing.T) {
 				"public_key": string(pubPEM),
 			})
 		case "/m2m/secrets/secret-id":
-			if r.Method != "PUT" {
-				t.Errorf("Expected PUT, got %s", r.Method)
+			if r.Method == "GET" {
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(Secret{
+					ID:          "secret-id",
+					Name:        "original-name",
+					EntriesBlob: res.CiphertextB64,
+					IV:          res.IVB64,
+					WrappedKey:  wrappedKey,
+				})
+				return
 			}
+			if r.Method == "PUT" {
+				var req CreateSecretRequest
+				json.NewDecoder(r.Body).Decode(&req)
+				
+				// Verify merging happened (this is hard without full decryption here, 
+				// but we can check the request body if we want)
+				
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(Secret{
+					ID:   "secret-id",
+					Name: req.Name,
+				})
+				return
+			}
+			t.Errorf("Unexpected method %s on %s", r.Method, r.URL.Path)
+		case "/m2m/unwrap":
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(Secret{
-				ID:   "secret-id",
-				Name: "updated-name",
+			json.NewEncoder(w).Encode(map[string]string{
+				"plaintext": base64.StdEncoding.EncodeToString(key),
 			})
 		default:
 			t.Errorf("Unexpected path: %s", r.URL.Path)

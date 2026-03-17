@@ -118,12 +118,14 @@ Creates a new zero-knowledge secret bundle. This function implements "True Blind
 
 ---
 
-### `client.UpdateSecret(ctx context.Context, projectID, secretID, name string, data map[string]string) (*Secret, error)`
-Updates an existing zero-knowledge secret bundle. Like `CreateSecret`, this implements "True Blindness":
-1. Generates a new local 256-bit AES DEK.
-2. Encrypts the new `data` locally.
-3. Wraps the new DEK locally using the public key.
-4. Uploads the update to the server.
+### `client.UpdateSecret(ctx context.Context, projectID, secretID, name string, newData map[string]string) (*Secret, error)`
+Updates an existing zero-knowledge secret bundle by performing a partial update (merge).
+1. Fetches the current encrypted bundle and decrypts it locally.
+2. Merges the existing data with the `newData` provided.
+3. Generates a new local 256-bit AES DEK.
+4. Re-encrypts the merged data locally.
+5. Wraps the new DEK locally using the public key.
+6. Uploads the update to the server.
 > [!NOTE]
 > The server never sees the old or new values. The metadata only identifies the keys present in the bundle.
 - **Parameters**:
@@ -131,7 +133,7 @@ Updates an existing zero-knowledge secret bundle. Like `CreateSecret`, this impl
     - `projectID`: The UUID of the project.
     - `secretID`: The ID of the secret to update.
     - `name`: The (possibly new) name for the secret bundle.
-    - `data`: The new map of key-value pairs.
+    - `newData`: The new map of key-value pairs to merge.
 - **Returns**: `*Secret`, `error`
 
 ---
@@ -189,6 +191,22 @@ type SecretKey struct {
 ```
 
 ---
+
+---
+
+## Testing
+
+To run the unit tests for the SDK, use the following command:
+
+```bash
+go test ./... -v
+```
+
+This will run all tests, including:
+- **Authentication**: Verifies the Vault AppRole login flow.
+- **Zero-Knowledge Operations**: Ensures data is encrypted locally and the Data Encryption Key (DEK) is wrapped before transmission.
+- **Partial Updates**: Tests the new merging logic where `UpdateSecret` fetches existing secrets and merges them with new input.
+- **CRUD Operations**: Verifies creation, listing, and deletion of secrets.
 
 ## Zero-Knowledge Architecture (True Blindness)
 

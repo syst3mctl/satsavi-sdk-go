@@ -179,16 +179,27 @@ func (c *Client) ListSecrets(ctx context.Context, projectID string) ([]Secret, e
 	return secrets, nil
 }
 
-// UpdateSecret updates an existing secret bundle with new data
+// UpdateSecret updates an existing secret bundle with new data (merges with existing)
 func (c *Client) UpdateSecret(ctx context.Context, projectID string, secretID string, name string, data map[string]string) (*Secret, error) {
-	// 1. Generate local DEK
+	// 1. Fetch current data to perform partial update
+	currentData, err := c.GetSecret(ctx, secretID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch current secret data: %w", err)
+	}
+
+	// 2. Merge data
+	for k, v := range data {
+		currentData[k] = v
+	}
+
+	// 3. Generate local DEK
 	key, err := Generate256BitKey()
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. Encrypt all entries as a JSON blob
-	jsonBytes, err := json.Marshal(data)
+	// 4. Encrypt all entries as a JSON blob
+	jsonBytes, err := json.Marshal(currentData)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +209,7 @@ func (c *Client) UpdateSecret(ctx context.Context, projectID string, secretID st
 		return nil, err
 	}
 
-	// 3. Wrap DEK locally via Public Key
+	// 5. Wrap DEK locally via Public Key
 	pubKey, err := c.GetPublicKey(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get public key for local wrapping: %w", err)
@@ -209,16 +220,16 @@ func (c *Client) UpdateSecret(ctx context.Context, projectID string, secretID st
 		return nil, fmt.Errorf("failed to wrap key locally: %w", err)
 	}
 
-	// 4. Prepare metadata entries (just keys, no values)
-	entries := make([]SecretEntry, 0, len(data))
-	for k := range data {
+	// 6. Prepare metadata entries (just keys, no values)
+	entries := make([]SecretEntry, 0, len(currentData))
+	for k := range currentData {
 		entries = append(entries, SecretEntry{
 			Key:            k,
 			EncryptedValue: "consolidated_in_blob",
 		})
 	}
 
-	// 5. Update the encrypted bundle via API
+	// 7. Update the encrypted bundle via API
 	reqBody := CreateSecretRequest{
 		ID:          secretID,
 		Name:        name,
