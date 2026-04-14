@@ -59,8 +59,17 @@ Authenticates with the Satsavi API using AppRole credentials.
 ### `client.CreateSecret(ctx, projectID, name, data) (*Secret, error)`
 Creates a new zero-knowledge secret bundle (implements True Blindness).
 
+### `client.CreateSecretFromEnv(ctx, projectID, name, rawEnv string) (*Secret, error)`
+Convenience method that parses a raw `.env` file content and creates a new secret bundle.
+
+### `client.UpdateSecretFromEnv(ctx, projectID, secretID, name, rawEnv string) (*Secret, error)`
+Convenience method that parses a raw `.env` file content and updates an existing bundle incrementally.
+
 ### `client.GetSecret(ctx, secretID) (map[string]string, error)`
 Retrieves and decrypts a secret bundle locally.
+
+### `satsavi.ParseEnv(rawEnv string) (map[string]string, error)`
+Utility function to securely parse a `.env` file content string into a map, respecting quotes, comments, and edge cases.
 
 ## Contributing
 

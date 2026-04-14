@@ -53,6 +53,21 @@ func main() {
 	}
 	log.Printf("Secret created successfully! ID: %s\n", newSecret.ID)
 
+	// 3.5. Create Secret from .env file content
+	rawEnv := `
+# A sample configuration block
+APP_ENV=production
+APP_DEBUG=false
+APP_SECRET="another-secret-token"
+export PORT=8080
+`
+	log.Printf("Creating .env secret...\n")
+	envSecret, err := client.CreateSecretFromEnv(context.Background(), projectID, "Env-Config", rawEnv)
+	if err != nil {
+		log.Fatalf("Failed to create secret from env: %v", err)
+	}
+	log.Printf(".env Secret created successfully! ID: %s\n", envSecret.ID)
+
 	// 4. List Secrets (confirm it exists)
 	log.Println("Listing secrets in project...")
 	secrets, err := client.ListSecrets(context.Background(), projectID)
